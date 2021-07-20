@@ -13,25 +13,45 @@ import {
   Tr,
   Checkbox,
   Button,
+  Link,
 } from "@chakra-ui/react";
-import Link from "next/link";
-import { useEffect } from "react";
-import { useQuery } from "react-query";
+import NextLink from "next/link";
+import { useState } from "react";
 
 import { RiAddBoxLine, RiPencilLine } from "react-icons/ri";
 import { Header } from "../../components/Header";
 import { Pagination } from "../../components/Pagination";
 import { Sidebar } from "../../components/Sidebar";
 import { Spinner } from "@chakra-ui/react";
-import { useUsers } from "../../services/hooks/useUsers";
+import { getUsers, useUsers } from "../../services/hooks/useUsers";
+import { queryClient } from "../../services/queryClient";
+import { api } from "../../services/api";
+import { GetServerSideProps } from "next";
 
-export default function UserList() {
-  const { data, isLoading, error, isFetching } = useUsers();
+export default function UserList({ users }) {
+  const [page, setPage] = useState(1);
+  const { data, isLoading, error, isFetching } = useUsers(page, {
+    initialData: users,
+  });
 
   const isWideVersion = useBreakpointValue({
     base: false,
     lg: true,
   });
+
+  async function handlePrefetchUser(userId: string) {
+    await queryClient.prefetchQuery(
+      ["user", userId],
+      async () => {
+        const response = await api.get(`users/${userId}`);
+
+        return response.data;
+      },
+      {
+        staleTime: 1000 * 60 * 10,
+      }
+    );
+  }
 
   return (
     <Box>
@@ -48,7 +68,7 @@ export default function UserList() {
               )}
             </Heading>
 
-            <Link href="/users/create" passHref>
+            <NextLink href="/users/create" passHref>
               <Button
                 as="a"
                 size="sm"
@@ -58,7 +78,7 @@ export default function UserList() {
               >
                 Criar novo
               </Button>
-            </Link>
+            </NextLink>
           </Flex>
 
           {isLoading ? (
@@ -84,7 +104,7 @@ export default function UserList() {
                 </Thead>
 
                 <Tbody>
-                  {data.map((user) => {
+                  {data.users.map((user) => {
                     return (
                       <Tr key={user.id}>
                         <Td px={["4", "4", "6"]}>
@@ -92,7 +112,12 @@ export default function UserList() {
                         </Td>
                         <Td>
                           <Box>
-                            <Text fontWeight="bold">{user.name}</Text>
+                            <Link
+                              color="purple"
+                              onMouseEnter={() => handlePrefetchUser(user.id)}
+                            >
+                              <Text fontWeight="bold">{user.name}</Text>
+                            </Link>
                             <Text fontSize="small" color="grat.300">
                               {user.email}
                             </Text>
@@ -116,7 +141,11 @@ export default function UserList() {
                 </Tbody>
               </Table>
 
-              <Pagination />
+              <Pagination
+                totalCountOfRegister={data.totalCount}
+                currentPage={page}
+                onPageChange={setPage}
+              />
             </>
           )}
         </Box>
@@ -124,3 +153,13 @@ export default function UserList() {
     </Box>
   );
 }
+
+export const getServerSiderProps: GetServerSideProps = async () => {
+  const { users, totalCount } = await getUsers(1);
+
+  return {
+    props: {
+      users,
+    },
+  };
+};
